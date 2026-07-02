@@ -374,55 +374,28 @@
         position: absolute;
         left: 50%;
         top: calc(100% - 2px);
-        width: 150px;
-        height: 118px;
-        transform: translateX(-50%) rotate(var(--cable-sway, 0deg));
-        transform-origin: 50% 0;
-        transition: transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
-        will-change: transform;
+        width: 180px;
+        height: 132px;
+        transform: translateX(-50%);
         pointer-events: none;
         z-index: 7;
     }
 
-    .earphone-cable-line {
+    .earphone-cable-svg {
         position: absolute;
-        left: 50%;
-        top: 2px;
-        width: 3px;
-        height: 92px;
-        transform: translateX(-50%);
-        transform-origin: top;
-        background: rgba(255,255,255,0.92);
-        border-radius: 999px;
-        box-shadow:
-            0 0 5px rgba(255,255,255,0.28),
-            0 1px 2px rgba(0,0,0,0.55);
-    }
-
-    .earphone-cable-line::before {
-        content: '';
-        position: absolute;
-        left: 50%;
-        top: 72px;
-        width: 40px;
-        height: 30px;
-        border: solid rgba(255,255,255,0.88);
-        border-width: 0 0 3px 3px;
-        border-radius: 0 0 0 22px;
-        background: transparent;
-        transform: translateX(-1px);
-        box-shadow: -1px 2px 2px rgba(0,0,0,0.45);
+        inset: 0;
+        overflow: visible;
     }
 
     .earphone-plug {
         position: absolute;
-        left: calc(50% + 34px);
-        top: 98px;
+        left: var(--plug-x, 120px);
+        top: var(--plug-y, 104px);
         width: 22px;
         height: 8px;
         border-radius: 2px;
         background: rgba(255,255,255,0.92);
-        transform: rotate(8deg);
+        transform: translate(-50%, -50%) rotate(var(--plug-rotation, 8deg));
         box-shadow:
             inset -5px 0 0 rgba(175,175,175,0.95),
             0 0 5px rgba(255,255,255,0.18),
@@ -744,8 +717,11 @@
     </div>
 
     <div class="bottom-cable-anchor" aria-hidden="true"></div>
-    <div class="earphone-cable" id="earphoneCable" aria-hidden="true">
-        <div class="earphone-cable-line"></div>
+    <div class="earphone-cable" id="earphoneCable" data-motion-status="idle" data-motion-events="0" aria-hidden="true">
+        <svg class="earphone-cable-svg" viewBox="0 0 180 132" preserveAspectRatio="none">
+            <path id="earphoneCableShadow" d="M 90 0 C 90 34 90 65 90 82 C 91 104 111 108 130 108" fill="none" stroke="rgba(0,0,0,0.45)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path id="earphoneCablePath" d="M 90 0 C 90 34 90 65 90 82 C 91 104 111 108 130 108" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
         <div class="earphone-plug"></div>
     </div>
 
@@ -755,6 +731,7 @@
     const WEB_HAPTICS_URL = 'https://esm.sh/web-haptics@0.0.6';
     const SPOTIFY_CLIENT_ID = 'ccc37f0ad9534259bfc68a390da5b9f6';
     const SPOTIFY_REDIRECT_URI = 'https://rekord-player.vercel.app/';
+    const SHOW_EARPHONE_CABLE = true;
     const SPOTIFY_SCOPES = [
         'streaming',
         'user-read-email',
@@ -788,7 +765,10 @@
         stopButton: document.getElementById('stopButton'),
         eqWave: document.getElementById('eqWave'),
         platterDisc: document.getElementById('platterDisc'),
+        cableAnchor: document.querySelector('.bottom-cable-anchor'),
         earphoneCable: document.getElementById('earphoneCable'),
+        earphoneCablePath: document.getElementById('earphoneCablePath'),
+        earphoneCableShadow: document.getElementById('earphoneCableShadow'),
         volumeKnob: document.getElementById('volumeKnob'),
         volumeTick: document.getElementById('volumeTick')
     };
@@ -810,9 +790,13 @@
     let activeVolumePointer = null;
     let lastVolumeHapticStep = Math.round(currentVolume * 20);
     let motionEnabled = false;
-    let cableSway = 0;
-    let targetCableSway = 0;
+    let cableTargetX = 0;
+    let cableTipX = 0;
+    let cableVelocityX = 0;
     let cableAnimationFrame = null;
+    let motionPermissionStatus = 'idle';
+    let motionEventCount = 0;
+    let genericAccelerometer = null;
 
     async function setupHaptics() {
         try {
@@ -857,61 +841,155 @@
         nativeVibrate(input, options);
     }
 
+    function setCableVisibility(visible) {
+        elements.cableAnchor.hidden = !visible;
+        elements.earphoneCable.hidden = !visible;
+    }
+
+    function setMotionStatus(status) {
+        motionPermissionStatus = status;
+        elements.earphoneCable.dataset.motionStatus = status;
+        elements.earphoneCable.dataset.motionEvents = String(motionEventCount);
+    }
+
     function clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
     }
 
-    function renderCableSway() {
-        const delta = targetCableSway - cableSway;
-        if (Math.abs(delta) < 0.08) {
-            cableSway = targetCableSway;
-            elements.earphoneCable.style.setProperty('--cable-sway', `${cableSway.toFixed(2)}deg`);
+    function drawCablePath() {
+        if (!SHOW_EARPHONE_CABLE) return;
+        const startX = 90;
+        const startY = 0;
+        const bendY = 79;
+        const tipX = 128 + cableTipX;
+        const tipY = 108;
+        const lowerControlX = startX + cableTipX * 0.18;
+        const exitControlX = startX + 3 + cableTipX * 0.68;
+        const path = [
+            `M ${startX} ${startY}`,
+            `C ${startX} 30 ${lowerControlX} 58 ${lowerControlX} ${bendY}`,
+            `C ${lowerControlX} 101 ${exitControlX} 108 ${tipX} ${tipY}`
+        ].join(' ');
+
+        elements.earphoneCablePath.setAttribute('d', path);
+        elements.earphoneCableShadow.setAttribute('d', path);
+        elements.earphoneCable.style.setProperty('--plug-x', `${tipX}px`);
+        elements.earphoneCable.style.setProperty('--plug-y', `${tipY}px`);
+        elements.earphoneCable.style.setProperty('--plug-rotation', `${clamp(cableTipX * 0.28, -10, 10)}deg`);
+    }
+
+    function updateCablePhysics() {
+        const force = (cableTargetX - cableTipX) * 0.075;
+        cableVelocityX = (cableVelocityX + force) * 0.82;
+        cableTipX += cableVelocityX;
+        drawCablePath();
+
+        if (Math.abs(cableTargetX - cableTipX) < 0.04 && Math.abs(cableVelocityX) < 0.04) {
+            cableTipX = cableTargetX;
+            cableVelocityX = 0;
+            drawCablePath();
             cableAnimationFrame = null;
             return;
         }
 
-        cableSway += delta * 0.18;
-        elements.earphoneCable.style.setProperty('--cable-sway', `${cableSway.toFixed(2)}deg`);
-        cableAnimationFrame = requestAnimationFrame(renderCableSway);
+        cableAnimationFrame = requestAnimationFrame(updateCablePhysics);
     }
 
     function setCableSway(nextSway) {
-        targetCableSway = clamp(nextSway, -18, 18);
+        if (!SHOW_EARPHONE_CABLE) return;
+        cableTargetX = clamp(nextSway, -34, 34);
         if (!cableAnimationFrame) {
-            cableAnimationFrame = requestAnimationFrame(renderCableSway);
+            cableAnimationFrame = requestAnimationFrame(updateCablePhysics);
+        }
+    }
+
+    function markMotionEvent() {
+        motionEventCount += 1;
+        if (motionPermissionStatus !== 'receiving') {
+            setMotionStatus('receiving');
+        } else {
+            elements.earphoneCable.dataset.motionEvents = String(motionEventCount);
         }
     }
 
     function handleDeviceOrientation(event) {
         if (typeof event.gamma !== 'number') return;
-        setCableSway(event.gamma * 0.55);
+        markMotionEvent();
+        setCableSway(event.gamma * 1.05);
     }
 
     function handleDeviceMotion(event) {
         const acceleration = event.accelerationIncludingGravity || event.acceleration;
         if (!acceleration || typeof acceleration.x !== 'number') return;
-        setCableSway(acceleration.x * -2.2);
+        markMotionEvent();
+        setCableSway(acceleration.x * -4.2);
     }
 
-    async function requestMotionPermission() {
-        if (motionEnabled) return true;
+    function startGenericSensorFallback() {
+        if (genericAccelerometer || typeof Accelerometer === 'undefined') return;
 
         try {
-            if (
-                typeof DeviceOrientationEvent !== 'undefined' &&
-                typeof DeviceOrientationEvent.requestPermission === 'function'
-            ) {
-                const permission = await DeviceOrientationEvent.requestPermission();
-                if (permission !== 'granted') return false;
-            }
+            genericAccelerometer = new Accelerometer({ frequency: 30 });
+            genericAccelerometer.addEventListener('reading', () => {
+                markMotionEvent();
+                setCableSway(genericAccelerometer.x * -4.2);
+            });
+            genericAccelerometer.addEventListener('error', () => {});
+            genericAccelerometer.start();
         } catch {
+            genericAccelerometer = null;
+        }
+    }
+
+    function registerMotionListeners() {
+        if (motionEnabled) return true;
+
+        window.addEventListener('deviceorientation', handleDeviceOrientation, true);
+        window.addEventListener('devicemotion', handleDeviceMotion, true);
+        startGenericSensorFallback();
+        motionEnabled = true;
+        setMotionStatus('listening');
+        return true;
+    }
+
+    async function requestSensorPermission(EventType) {
+        if (typeof EventType === 'undefined') return 'unsupported';
+        if (typeof EventType.requestPermission !== 'function') return 'granted';
+        return EventType.requestPermission();
+    }
+
+    async function requestMotionPermission(options = {}) {
+        if (!SHOW_EARPHONE_CABLE) return false;
+        if (motionEnabled) return true;
+
+        const needsOrientationPermission =
+            typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function';
+        const needsMotionPermission =
+            typeof DeviceMotionEvent !== 'undefined' &&
+            typeof DeviceMotionEvent.requestPermission === 'function';
+
+        if ((needsOrientationPermission || needsMotionPermission) && !options.fromGesture) {
+            setMotionStatus('needs-gesture');
             return false;
         }
 
-        window.addEventListener('deviceorientation', handleDeviceOrientation);
-        window.addEventListener('devicemotion', handleDeviceMotion);
-        motionEnabled = true;
-        return true;
+        try {
+            const motionPermission = await requestSensorPermission(DeviceMotionEvent);
+            const orientationPermission = await requestSensorPermission(DeviceOrientationEvent);
+            const motionUsable = motionPermission === 'granted' || motionPermission === 'unsupported';
+            const orientationUsable = orientationPermission === 'granted' || orientationPermission === 'unsupported';
+
+            if (!motionUsable && !orientationUsable) {
+                setMotionStatus('denied');
+                return false;
+            }
+        } catch {
+            setMotionStatus('denied');
+            return false;
+        }
+
+        return registerMotionListeners();
     }
 
     function todayLabel() {
@@ -1332,12 +1410,15 @@
     }
 
     function bindControls() {
-        elements.device.addEventListener('pointerdown', () => {
-            requestMotionPermission();
-        }, { once: true });
+        const enableMotionFromGesture = () => {
+            requestMotionPermission({ fromGesture: true });
+        };
+        elements.device.addEventListener('pointerdown', enableMotionFromGesture);
+        elements.device.addEventListener('click', enableMotionFromGesture);
+        elements.device.addEventListener('touchend', enableMotionFromGesture);
         elements.loginButton.addEventListener('click', async () => {
             triggerHaptic('success');
-            requestMotionPermission();
+            requestMotionPermission({ fromGesture: true });
             if (readTokenState().accessToken) {
                 clearTokenState();
                 window.location.href = SPOTIFY_REDIRECT_URI;
@@ -1359,7 +1440,11 @@
 
     async function init() {
         setupHaptics();
-        requestMotionPermission();
+        setCableVisibility(SHOW_EARPHONE_CABLE);
+        if (SHOW_EARPHONE_CABLE) {
+            drawCablePath();
+            requestMotionPermission();
+        }
         elements.metaDate.textContent = todayLabel();
         setConnected(false);
         await updateVolume(currentVolume);
