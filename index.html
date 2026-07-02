@@ -795,6 +795,7 @@
     let cableVelocityX = 0;
     let cableAnimationFrame = null;
     let motionPermissionStatus = 'idle';
+    let motionPermissionRequest = null;
     let motionEventCount = 0;
     let genericAccelerometer = null;
 
@@ -850,6 +851,23 @@
         motionPermissionStatus = status;
         elements.earphoneCable.dataset.motionStatus = status;
         elements.earphoneCable.dataset.motionEvents = String(motionEventCount);
+    }
+
+    function removeMotionPermissionGestureHooks() {
+        document.removeEventListener('click', enableMotionFromGesture);
+        document.removeEventListener('touchend', enableMotionFromGesture);
+        document.removeEventListener('pointerup', enableMotionFromGesture);
+    }
+
+    function enableMotionFromGesture() {
+        requestMotionPermission({ fromGesture: true });
+    }
+
+    function installMotionPermissionGestureHooks() {
+        if (!SHOW_EARPHONE_CABLE) return;
+        document.addEventListener('click', enableMotionFromGesture, { once: true });
+        document.addEventListener('touchend', enableMotionFromGesture, { once: true });
+        document.addEventListener('pointerup', enableMotionFromGesture, { once: true });
     }
 
     function clamp(value, min, max) {
@@ -952,6 +970,10 @@
         return true;
     }
 
+    function getSensorEventConstructor(name) {
+        return typeof window !== 'undefined' ? window[name] : undefined;
+    }
+
     async function requestSensorPermission(EventType) {
         if (typeof EventType === 'undefined') return 'unsupported';
         if (typeof EventType.requestPermission !== 'function') return 'granted';
@@ -961,35 +983,53 @@
     async function requestMotionPermission(options = {}) {
         if (!SHOW_EARPHONE_CABLE) return false;
         if (motionEnabled) return true;
+        if (motionPermissionRequest) return motionPermissionRequest;
 
+        const MotionEventType = getSensorEventConstructor('DeviceMotionEvent');
+        const OrientationEventType = getSensorEventConstructor('DeviceOrientationEvent');
         const needsOrientationPermission =
-            typeof DeviceOrientationEvent !== 'undefined' &&
-            typeof DeviceOrientationEvent.requestPermission === 'function';
+            typeof OrientationEventType !== 'undefined' &&
+            typeof OrientationEventType.requestPermission === 'function';
         const needsMotionPermission =
-            typeof DeviceMotionEvent !== 'undefined' &&
-            typeof DeviceMotionEvent.requestPermission === 'function';
+            typeof MotionEventType !== 'undefined' &&
+            typeof MotionEventType.requestPermission === 'function';
 
         if ((needsOrientationPermission || needsMotionPermission) && !options.fromGesture) {
             setMotionStatus('needs-gesture');
+            installMotionPermissionGestureHooks();
             return false;
         }
 
-        try {
-            const motionPermission = await requestSensorPermission(DeviceMotionEvent);
-            const orientationPermission = await requestSensorPermission(DeviceOrientationEvent);
-            const motionUsable = motionPermission === 'granted' || motionPermission === 'unsupported';
-            const orientationUsable = orientationPermission === 'granted' || orientationPermission === 'unsupported';
+        motionPermissionRequest = (async () => {
+            try {
+                const motionPermissionPromise = requestSensorPermission(MotionEventType);
+                const orientationPermissionPromise = requestSensorPermission(OrientationEventType);
+                const [motionPermission, orientationPermission] = await Promise.all([
+                    motionPermissionPromise,
+                    orientationPermissionPromise
+                ]);
+                const motionUsable = motionPermission === 'granted' || motionPermission === 'unsupported';
+                const orientationUsable = orientationPermission === 'granted' || orientationPermission === 'unsupported';
 
-            if (!motionUsable && !orientationUsable) {
+                if (!motionUsable && !orientationUsable) {
+                    setMotionStatus('denied');
+                    return false;
+                }
+            } catch {
                 setMotionStatus('denied');
                 return false;
             }
-        } catch {
-            setMotionStatus('denied');
-            return false;
-        }
 
-        return registerMotionListeners();
+            const registered = registerMotionListeners();
+            if (registered) removeMotionPermissionGestureHooks();
+            return registered;
+        })();
+
+        try {
+            return await motionPermissionRequest;
+        } finally {
+            motionPermissionRequest = null;
+        }
     }
 
     function todayLabel() {
