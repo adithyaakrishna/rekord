@@ -370,33 +370,6 @@
         overflow: visible;
     }
 
-    .earphone-plug {
-        position: absolute;
-        left: var(--plug-x, 120px);
-        top: var(--plug-y, 104px);
-        width: 22px;
-        height: 8px;
-        border-radius: 2px;
-        background: rgba(255,255,255,0.92);
-        transform: translate(-50%, -50%) rotate(var(--plug-rotation, 8deg));
-        box-shadow:
-            inset -5px 0 0 rgba(175,175,175,0.95),
-            0 0 5px rgba(255,255,255,0.18),
-            0 1px 2px rgba(0,0,0,0.65);
-    }
-
-    .earphone-plug::after {
-        content: '';
-        position: absolute;
-        right: -8px;
-        top: 50%;
-        width: 8px;
-        height: 4px;
-        border-radius: 0 2px 2px 0;
-        background: rgba(225,225,225,0.95);
-        transform: translateY(-50%);
-    }
-
     .platter-center-cap {
         width: 40px;
         height: 40px;
@@ -703,8 +676,13 @@
         <svg class="earphone-cable-svg" viewBox="0 0 180 132" preserveAspectRatio="none">
             <path id="earphoneCableShadow" d="M 90 0 C 90 34 90 65 90 82 C 91 104 111 108 130 108" fill="none" stroke="rgba(0,0,0,0.45)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
             <path id="earphoneCablePath" d="M 90 0 C 90 34 90 65 90 82 C 91 104 111 108 130 108" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            <g id="earphoneCablePlug" transform="translate(128 108) rotate(180)">
+                <rect x="-11" y="-4" width="22" height="8" rx="2" fill="rgba(255,255,255,0.92)"></rect>
+                <rect x="2" y="-4" width="7" height="8" rx="1" fill="rgba(175,175,175,0.95)"></rect>
+                <rect x="11" y="-2" width="8" height="4" rx="1.5" fill="rgba(225,225,225,0.95)"></rect>
+                <path d="M -12 5 L 17 5" stroke="rgba(0,0,0,0.45)" stroke-width="2" stroke-linecap="round"></path>
+            </g>
         </svg>
-        <div class="earphone-plug"></div>
     </div>
 
 </div>
@@ -713,7 +691,7 @@
     const WEB_HAPTICS_URL = 'https://esm.sh/web-haptics@0.0.6';
     const SPOTIFY_CLIENT_ID = 'ccc37f0ad9534259bfc68a390da5b9f6';
     const SPOTIFY_REDIRECT_URI = 'https://rekord-player.vercel.app/';
-    const SHOW_EARPHONE_CABLE = true;
+    const SHOW_EARPHONE_CABLE = false;
     const SPOTIFY_SCOPES = [
         'streaming',
         'user-read-email',
@@ -750,6 +728,7 @@
         earphoneCable: document.getElementById('earphoneCable'),
         earphoneCablePath: document.getElementById('earphoneCablePath'),
         earphoneCableShadow: document.getElementById('earphoneCableShadow'),
+        earphoneCablePlug: document.getElementById('earphoneCablePlug'),
         volumeKnob: document.getElementById('volumeKnob'),
         volumeTick: document.getElementById('volumeTick')
     };
@@ -873,9 +852,10 @@
 
         elements.earphoneCablePath.setAttribute('d', path);
         elements.earphoneCableShadow.setAttribute('d', path);
-        elements.earphoneCable.style.setProperty('--plug-x', `${tipX}px`);
-        elements.earphoneCable.style.setProperty('--plug-y', `${tipY}px`);
-        elements.earphoneCable.style.setProperty('--plug-rotation', `${clamp(cableTipX * 0.28, -10, 10)}deg`);
+        const plugX = tipX;
+        const plugY = tipY;
+        const plugRotation = 180 + clamp(cableTipX * 0.28, -10, 10);
+        elements.earphoneCablePlug.setAttribute('transform', `translate(${plugX} ${plugY}) rotate(${plugRotation})`);
     }
 
     function updateCablePhysics() {
