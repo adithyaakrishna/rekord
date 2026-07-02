@@ -353,27 +353,10 @@
         animation: platterSpin 3s linear infinite;
     }
 
-    .bottom-cable-anchor {
-        position: absolute;
-        left: 50%;
-        top: calc(100% - 2px);
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: #101010;
-        border: 2px solid rgba(255,255,255,0.86);
-        transform: translateX(-50%);
-        box-shadow:
-            inset 0 0 4px rgba(0,0,0,0.85),
-            0 0 5px rgba(255,255,255,0.22);
-        pointer-events: none;
-        z-index: 8;
-    }
-
     .earphone-cable {
         position: absolute;
         left: 50%;
-        top: calc(100% - 2px);
+        top: calc(100% - 1px);
         width: 180px;
         height: 132px;
         transform: translateX(-50%);
@@ -716,7 +699,6 @@
         </div>
     </div>
 
-    <div class="bottom-cable-anchor" aria-hidden="true"></div>
     <div class="earphone-cable" id="earphoneCable" data-motion-status="idle" data-motion-events="0" aria-hidden="true">
         <svg class="earphone-cable-svg" viewBox="0 0 180 132" preserveAspectRatio="none">
             <path id="earphoneCableShadow" d="M 90 0 C 90 34 90 65 90 82 C 91 104 111 108 130 108" fill="none" stroke="rgba(0,0,0,0.45)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -765,7 +747,6 @@
         stopButton: document.getElementById('stopButton'),
         eqWave: document.getElementById('eqWave'),
         platterDisc: document.getElementById('platterDisc'),
-        cableAnchor: document.querySelector('.bottom-cable-anchor'),
         earphoneCable: document.getElementById('earphoneCable'),
         earphoneCablePath: document.getElementById('earphoneCablePath'),
         earphoneCableShadow: document.getElementById('earphoneCableShadow'),
@@ -843,7 +824,6 @@
     }
 
     function setCableVisibility(visible) {
-        elements.cableAnchor.hidden = !visible;
         elements.earphoneCable.hidden = !visible;
     }
 
@@ -881,11 +861,13 @@
         const bendY = 79;
         const tipX = 128 + cableTipX;
         const tipY = 108;
-        const lowerControlX = startX + cableTipX * 0.18;
+        const attachControlX = startX + cableTipX * 0.32;
+        const upperControlX = startX + cableTipX * 0.58;
+        const lowerControlX = startX + cableTipX * 0.72;
         const exitControlX = startX + 3 + cableTipX * 0.68;
         const path = [
             `M ${startX} ${startY}`,
-            `C ${startX} 30 ${lowerControlX} 58 ${lowerControlX} ${bendY}`,
+            `C ${attachControlX} 28 ${upperControlX} 58 ${lowerControlX} ${bendY}`,
             `C ${lowerControlX} 101 ${exitControlX} 108 ${tipX} ${tipY}`
         ].join(' ');
 
