@@ -1,4 +1,4 @@
-# Rekord Spotify Hardware Player
+# Rekord Player
 
 `rekord.html` is a standalone browser-based Spotify player widget styled like a compact hardware music device. It preserves the original chassis style interface while adding Spotify login, playback controls, haptics, animated playback feedback, and a physical feeling volume dial.
 
